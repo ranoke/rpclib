@@ -1,5 +1,6 @@
 import json
 import socket
+import threading
 
 class Status:
     OK = 0
@@ -24,24 +25,30 @@ class RPCListener(RPCBase):
     def add_method(self, name : str, method):
         self.binded_method[name] = method
 
-    def poll(self):
-        client_socket, addr = self.sock.accept()
-        msg = client_socket.recv(self.DEFAULT_MAX_REQEUST_SIZE)
+    def handle_poll(self, lock, client_socket):
+        request = None
+        try:
+            msg = client_socket.recv(self.DEFAULT_MAX_REQEUST_SIZE)
+        except:
+            return
         request = json.loads(msg.decode("utf-8"))
+
 
         result = None
         status = Status.ERROR
-        try:
-            name = request["name"]
-            args = request["args"]
 
-            if name in self.binded_method:
-                result = self.binded_method[name](*args)
-                status = Status.OK
-            else:
-                status = Status.NOT_FOUND
-        except Exception:
-            print(f"Error: {Exception}")
+        name = request["name"]
+        args = request["args"]
+
+        if name in self.binded_method:
+            if lock:
+                lock.acquire()
+            result = self.binded_method[name](*args)
+            if lock:
+                lock.release()
+            status = Status.OK
+        else:
+            status = Status.NOT_FOUND
 
         response = {
             "result": result,
@@ -49,15 +56,21 @@ class RPCListener(RPCBase):
         }
 
         msg = json.dumps(response)
-        client_socket.send(msg.encode("utf-8"))
-        client_socket.close()
+        try:
+            client_socket.send(msg.encode("utf-8"))
+        except:
+            return
+
+    def poll(self, lock = None):
+        client_socket, addr = self.sock.accept()
+        t = threading.Thread(target=self.handle_poll, args=[lock, client_socket])
+        t.start()
+
 
 class RpcCaller(RPCBase):
 
-    def __init__(self):
+    def call_method(self, name, args = []):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-    def call_method(self, name, args):
         self.sock.connect((self.DEFAULT_ADDR, self.DEFAULT_PORT))
 
         request = {
@@ -70,4 +83,6 @@ class RpcCaller(RPCBase):
 
         msg = self.sock.recv(self.DEFAULT_MAX_REQEUST_SIZE)
         response = json.loads(msg.decode("utf-8"))
+        self.sock.close()
+
         return response["result"], response["status"]
