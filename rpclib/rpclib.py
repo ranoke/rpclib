@@ -8,16 +8,14 @@ class Status:
     ERROR = 2
 
 class RPCBase:
-    DEFAULT_ADDR = "localhost"
-    DEFAULT_PORT = 13749
     DEFAULT_MAX_REQEUST_SIZE = 1024
 
 class RPCListener(RPCBase):
 
-    def __init__(self) -> None:
+    def __init__(self, addr, port) -> None:
         super().__init__()
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.bind((self.DEFAULT_ADDR, self.DEFAULT_PORT))
+        self.sock.bind((addr, port))
         self.sock.listen()
         self.binded_method = {}
         pass
@@ -68,10 +66,13 @@ class RPCListener(RPCBase):
 
 
 class RpcCaller(RPCBase):
+    def __init__(self, addr, port):
+        self.addr = addr
+        self.port = port
 
     def call_method(self, name, args = []):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.connect((self.DEFAULT_ADDR, self.DEFAULT_PORT))
+        self.sock.connect((self.addr, self.port))
 
         request = {
             "name": name,
